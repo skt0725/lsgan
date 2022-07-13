@@ -148,7 +148,7 @@ for epoch in range(total_epoch):
     if epoch == 0:
         real_image = real_image.view(real_image.size(0), 3, 64, 64)
         save_image(real_image, "./result/real.png", normalize=True)
-    if epoch % 10 == 0:
+    if epoch+1 % 10 == 0:
         fake_image = fake_image.view(fake_image.size(0), 3, 64, 64)
         # dir = f"./result/detach"
         save_image(fake_image, os.path.join(dir, f"{epoch}.png"), normalize=True)
