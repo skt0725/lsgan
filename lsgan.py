@@ -20,12 +20,26 @@ transforms = transforms.Compose([
     transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
 ])
 # resize to 64 (32 too small)
+'''
+Comment: 
+Yes, it is small. But when people report results using CIFAR10,
+they keep the size since it is good for fair comparison (and for reproduce).
+Definitely, the performance of GAN is affected by the size of sample image.
+If you changed the size due to hard visualization, it would be better to upsample it after sampling, rather than to generate large image.
+'''
 
 # hyperparameter setting
 data_dir = "./data"
 batch_size = 64
 latent_size = 100
 total_epoch = 50
+'''
+Comment:
+Little bit small number of epochs.
+You may increase the number of epochs upto 200 for further convergence.
+It would take some time, but it is common to wait several hours for training.
+'''
+
 learning_rate = 0.0002
 train_data = datasets.CIFAR10(root = data_dir, train = True, transform = transforms, download = True)
 dataloader = DataLoader(dataset = train_data, batch_size = batch_size, shuffle = True, num_workers = 4)
@@ -38,6 +52,13 @@ label = labels[0]
 # plt.title(label = label)
 # plt.show()
 
+'''
+Comment:
+Good, I recommend to see below repo which got many starts.
+Both in the lsgan paper and the repo, generator contains a linear layer
+to map noise vector (z) into higher dimension latent space.
+repo: https://github.com/eriklindernoren/PyTorch-GAN/blob/master/implementations/lsgan/lsgan.py
+'''
 class Generator(nn.Module):
     def __init__(self, latent_size):
         super().__init__()
@@ -118,6 +139,15 @@ for epoch in range(total_epoch):
     start_time = time()
     for i, (image, label) in enumerate(dataloader):
         real_image = image.to(device)
+        
+        '''
+        Comment:
+        Nice details. The paper also defined parameters called a,b,c.
+        If you see the paper section 3.2.3, they set a=-1, b= 1, and c=0, 
+        which becomes the same loss equations as the vanilla gan except BCE -> MSE.
+        So, for easier implementation, you can just change the 'criterion' in your vanilla gan implementation.
+        The lsgan was spotlighted because this simple change cause better results.
+        '''
         a = torch.zeros((image.size(0), 1)).to(device)
         b = torch.ones((image.size(0), 1)).to(device)
         c = torch.ones((image.size(0), 1)).to(device)
@@ -142,7 +172,14 @@ for epoch in range(total_epoch):
 
         generator_loss.backward()
         gen_optimizer.step()
+
     dir = f"./result"
+    '''
+    Comment: 
+    'dir' is a name of internal function of Python. 
+    It would be better change the variable name.
+    '''
+    
     if not os.path.exists(dir):
         os.makedirs(dir)
     if epoch == 0:
@@ -155,6 +192,31 @@ for epoch in range(total_epoch):
     t = time()-start_time
     average_time += t
     print(f'Epoch {epoch}/{total_epoch} || discriminator loss={discriminator_loss:.4f}  || generator loss={generator_loss:.4f} || time {t:.3f}')
+
 torch.save(discriminator.state_dict(), os.path.join(dir,"discriminator.ckpt"))
 torch.save(generator.state_dict(), os.path.join(dir,"generator.ckpt"))
+'''
+Comment:
+A Pytorch convection for checkpoint path is using either '.pt' or '.pth' extension.
+ref: https://pytorch.org/tutorials/beginner/saving_loading_models.html
+'''
 print(average_time/epoch)
+
+
+'''
+Comment:
+Well done! 
+
+1) Generated image quality is not bad for the lsgan. 
+I think there is a room for improvement if you change some implementations, but this is enough.
+
+2) If you want to check if the lsgan is better than vanilla gan, you can train the vanilla gan using CIFAR10 and compare the result the lsgan.
+Be aware to make the fair comparison (Ex. same model architecture, optimizer, batch_size, lr ...).
+Obviously, the lsgan will be better than the vanilla gan, and you can see why the lsgan paper said that it is stable.
+(Maybe, the word 'stable' means that it is more stable than the vanilla gan.)
+
+3) Next step is wgan, which of background is harder than previous ones.
+You don't need to understand everything in the paper.
+At first time, just look around the concept of the paper.
+(What is the problem the paper claims / How they prove that the claim is true / How they solve the problem.)
+'''
