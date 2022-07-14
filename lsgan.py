@@ -15,7 +15,7 @@ os.environ["CUDA_VISIBLE_DEVICES"]= "0, 1"
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 transforms = transforms.Compose([
-    transforms.Resize(64),
+    transforms.Resize(32),
     transforms.ToTensor(),
     transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
 ])
@@ -27,17 +27,23 @@ they keep the size since it is good for fair comparison (and for reproduce).
 Definitely, the performance of GAN is affected by the size of sample image.
 If you changed the size due to hard visualization, it would be better to upsample it after sampling, rather than to generate large image.
 '''
-
+'''
+I resized for two reasons; 1. I wanted to increase the number of convolution layers 2. hardship of visualization
+I understood the convention of using the original size for comparison, so I'll try with 32*32!
+'''
 # hyperparameter setting
 data_dir = "./data"
 batch_size = 64
 latent_size = 100
-total_epoch = 50
+total_epoch = 200
 '''
 Comment:
 Little bit small number of epochs.
 You may increase the number of epochs upto 200 for further convergence.
 It would take some time, but it is common to wait several hours for training.
+'''
+'''
+Set number of epochs to 200!
 '''
 
 learning_rate = 0.0002
@@ -54,15 +60,20 @@ label = labels[0]
 
 '''
 Comment:
-Good, I recommend to see below repo which got many starts.
+Good, I recommend to see below repo which got many stars.
 Both in the lsgan paper and the repo, generator contains a linear layer
 to map noise vector (z) into higher dimension latent space.
 repo: https://github.com/eriklindernoren/PyTorch-GAN/blob/master/implementations/lsgan/lsgan.py
 '''
+'''
+
+'''
 class Generator(nn.Module):
     def __init__(self, latent_size):
         super().__init__()
+        self.fc = nn.Linear(100, 128*64)
         self.conv1= nn.Sequential(
+            nn.Upsample(scale_factor = 2),
             nn.ConvTranspose2d(latent_size, 512, 4, 1),
             nn.BatchNorm2d(512),
             nn.ReLU(inplace = True)
@@ -88,7 +99,8 @@ class Generator(nn.Module):
         )
 
     def forward(self, z):
-        output = self.conv1(z)
+        output = self.fc(z)
+        output = self.conv1(output)
         output = self.conv2(output)
         output = self.conv3(output)
         output = self.conv4(output)
@@ -148,6 +160,11 @@ for epoch in range(total_epoch):
         So, for easier implementation, you can just change the 'criterion' in your vanilla gan implementation.
         The lsgan was spotlighted because this simple change cause better results.
         '''
+        '''
+        Equation 8 in lsgan satisfies b-c=1 && b-a=2 but its semantic is unclear to me.
+        Rather, equation 9 is intuitive and I thought this is almost the same with vanilla gan.
+        I guess need some help understanding this part!
+        '''
         a = torch.zeros((image.size(0), 1)).to(device)
         b = torch.ones((image.size(0), 1)).to(device)
         c = torch.ones((image.size(0), 1)).to(device)
@@ -173,11 +190,15 @@ for epoch in range(total_epoch):
         generator_loss.backward()
         gen_optimizer.step()
 
-    dir = f"./result"
+    result_save_dir = f"./result"
     '''
     Comment: 
     'dir' is a name of internal function of Python. 
     It would be better change the variable name.
+    '''
+    '''
+    Oops. Fixed it!
+    I'll have to give more detailed naming to avoid this problem!
     '''
     
     if not os.path.exists(dir):
@@ -193,12 +214,16 @@ for epoch in range(total_epoch):
     average_time += t
     print(f'Epoch {epoch}/{total_epoch} || discriminator loss={discriminator_loss:.4f}  || generator loss={generator_loss:.4f} || time {t:.3f}')
 
-torch.save(discriminator.state_dict(), os.path.join(dir,"discriminator.ckpt"))
-torch.save(generator.state_dict(), os.path.join(dir,"generator.ckpt"))
+torch.save(discriminator.state_dict(), os.path.join(dir,"discriminator.pth"))
+torch.save(generator.state_dict(), os.path.join(dir,"generator.pth"))
 '''
 Comment:
 A Pytorch convection for checkpoint path is using either '.pt' or '.pth' extension.
 ref: https://pytorch.org/tutorials/beginner/saving_loading_models.html
+'''
+'''
+.ckpt is for tensorflow checkpoint path!
+Thank you for pointing out. Fixed!
 '''
 print(average_time/epoch)
 
