@@ -66,15 +66,16 @@ to map noise vector (z) into higher dimension latent space.
 repo: https://github.com/eriklindernoren/PyTorch-GAN/blob/master/implementations/lsgan/lsgan.py
 '''
 '''
-
+I tried to replace fc layer to deconvolutional layer at first.
+Mapped noise vector from 100 to 1024 dimension using fc (non-linearity not introduced)
+Further experiment : introduced non-linearity (maybe ReLU)
 '''
 class Generator(nn.Module):
     def __init__(self, latent_size):
         super().__init__()
-        self.fc = nn.Linear(100, 128*64)
+        self.fc = nn.Linear(100, 1024)
         self.conv1= nn.Sequential(
-            nn.Upsample(scale_factor = 2),
-            nn.ConvTranspose2d(latent_size, 512, 4, 1),
+            nn.ConvTranspose2d(1024, 512, 4, 1),
             nn.BatchNorm2d(512),
             nn.ReLU(inplace = True)
         )
@@ -89,22 +90,17 @@ class Generator(nn.Module):
             nn.ReLU(inplace = True)
         )
         self.conv4 = nn.Sequential(
-            nn.ConvTranspose2d(128, 64, 4, 2, 1),
-            nn.BatchNorm2d(64),
-            nn.ReLU(inplace = True)
-        )
-        self.conv5 = nn.Sequential(
-            nn.ConvTranspose2d(64, 3, 4, 2, 1),
+            nn.ConvTranspose2d(128, 3, 4, 2, 1),
             nn.Tanh()
         )
 
     def forward(self, z):
         output = self.fc(z)
+        output = output.view(output.size(0), 1024, 1, 1)
         output = self.conv1(output)
         output = self.conv2(output)
         output = self.conv3(output)
         output = self.conv4(output)
-        output = self.conv5(output)
         return output
 
 class Discriminator(nn.Module):
@@ -125,19 +121,13 @@ class Discriminator(nn.Module):
             nn.LeakyReLU(inplace = True)
         )
         self.conv4 = nn.Sequential(
-            nn.Conv2d(256, 512, 4, 2, 1),
-            nn.BatchNorm2d(512),
-            nn.LeakyReLU(inplace = True)
-        )
-        self.conv5 = nn.Sequential(
-            nn.Conv2d(512, 1, 4, 1, 0)
+            nn.Conv2d(256, 1, 4, 1, 0)
         )
     def forward(self, z):
         output = self.conv1(z)
         output = self.conv2(output)
         output = self.conv3(output)
         output = self.conv4(output)
-        output = self.conv5(output)
         return output.view(-1, 1)
 
 discriminator = Discriminator().to(device)
@@ -165,13 +155,16 @@ for epoch in range(total_epoch):
         Rather, equation 9 is intuitive and I thought this is almost the same with vanilla gan.
         I guess need some help understanding this part!
         '''
+        '''
+        Question solved! equation 9 has similar form with vanilla gan
+        '''
         a = torch.zeros((image.size(0), 1)).to(device)
         b = torch.ones((image.size(0), 1)).to(device)
         c = torch.ones((image.size(0), 1)).to(device)
         # train discriminator
         dis_optimizer.zero_grad()
         real_output = discriminator(real_image)
-        z = torch.randn((image.size(0), latent_size, 1, 1)).to(device)
+        z = torch.randn((image.size(0), latent_size)).to(device)
         fake_image = generator(z)
         fake_output = discriminator(fake_image.detach())
         real_loss = criterion(real_output, b)/2
@@ -182,7 +175,7 @@ for epoch in range(total_epoch):
 
         # train generator
         gen_optimizer.zero_grad()
-        z = torch.randn((image.size(0), latent_size, 1, 1)).to(device)
+        z = torch.randn((image.size(0), latent_size)).to(device)
         fake_image = generator(z)
         fake_output = discriminator(fake_image)
         generator_loss = criterion(fake_output, c)/2
@@ -190,7 +183,7 @@ for epoch in range(total_epoch):
         generator_loss.backward()
         gen_optimizer.step()
 
-    result_save_dir = f"./result"
+    result_save_dir = f"./result/mse"
     '''
     Comment: 
     'dir' is a name of internal function of Python. 
@@ -200,22 +193,23 @@ for epoch in range(total_epoch):
     Oops. Fixed it!
     I'll have to give more detailed naming to avoid this problem!
     '''
-    
-    if not os.path.exists(dir):
-        os.makedirs(dir)
+    m = nn.Upsample(scale_factor = 2)
+    if not os.path.exists(result_save_dir):
+        os.makedirs(result_save_dir)
     if epoch == 0:
-        real_image = real_image.view(real_image.size(0), 3, 64, 64)
+        real_image = real_image.view(real_image.size(0), 3, 32, 32)
+        real_image = m(real_image)
         save_image(real_image, "./result/real.png", normalize=True)
-    if epoch+1 % 10 == 0:
-        fake_image = fake_image.view(fake_image.size(0), 3, 64, 64)
-        # dir = f"./result/detach"
-        save_image(fake_image, os.path.join(dir, f"{epoch}.png"), normalize=True)
+    if (epoch+1) % 10 == 0:
+        fake_image = fake_image.view(fake_image.size(0), 3, 32, 32)
+        fake_image = m(fake_image)
+        save_image(fake_image, os.path.join(result_save_dir, f"{epoch}.png"), normalize=True)
     t = time()-start_time
     average_time += t
     print(f'Epoch {epoch}/{total_epoch} || discriminator loss={discriminator_loss:.4f}  || generator loss={generator_loss:.4f} || time {t:.3f}')
 
-torch.save(discriminator.state_dict(), os.path.join(dir,"discriminator.pth"))
-torch.save(generator.state_dict(), os.path.join(dir,"generator.pth"))
+torch.save(discriminator.state_dict(), os.path.join(result_save_dir,"discriminator.pth"))
+torch.save(generator.state_dict(), os.path.join(result_save_dir,"generator.pth"))
 '''
 Comment:
 A Pytorch convection for checkpoint path is using either '.pt' or '.pth' extension.
@@ -244,4 +238,9 @@ Obviously, the lsgan will be better than the vanilla gan, and you can see why th
 You don't need to understand everything in the paper.
 At first time, just look around the concept of the paper.
 (What is the problem the paper claims / How they prove that the claim is true / How they solve the problem.)
+'''
+
+'''
+improvements
+- use argparse for options
 '''
