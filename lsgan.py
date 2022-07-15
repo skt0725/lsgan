@@ -8,13 +8,14 @@ import torchvision.transforms as transforms
 import matplotlib.pyplot as plt
 from torchvision.utils import save_image
 from time import time
+from torch.utils.tensorboard import SummaryWriter
 
 os.environ["CUDA_DEVICE_ORDER"]="PCI_BUS_ID"
 os.environ["CUDA_VISIBLE_DEVICES"]= "0, 1"
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-transforms = transforms.Compose([
+transform_input = transforms.Compose([
     transforms.Resize(32),
     transforms.ToTensor(),
     transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5])
@@ -47,7 +48,7 @@ Set number of epochs to 200!
 '''
 
 learning_rate = 0.0002
-train_data = datasets.CIFAR10(root = data_dir, train = True, transform = transforms, download = True)
+train_data = datasets.CIFAR10(root = data_dir, train = True, transform = transform_input, download = True)
 dataloader = DataLoader(dataset = train_data, batch_size = batch_size, shuffle = True, num_workers = 4)
 
 images, labels = next(iter(dataloader))
@@ -135,8 +136,9 @@ generator = Generator(latent_size).to(device)
 dis_optimizer = torch.optim.Adam(discriminator.parameters(), lr=learning_rate)
 gen_optimizer = torch.optim.Adam(generator.parameters(), lr=learning_rate)
 
-criterion = nn.MSELoss().to(device)
+criterion = nn.BCEWithLogitsLoss().to(device)
 average_time = 0
+summary = SummaryWriter('logs/')
 for epoch in range(total_epoch):
     start_time = time()
     for i, (image, label) in enumerate(dataloader):
@@ -178,12 +180,12 @@ for epoch in range(total_epoch):
         z = torch.randn((image.size(0), latent_size)).to(device)
         fake_image = generator(z)
         fake_output = discriminator(fake_image)
-        generator_loss = criterion(fake_output, c)/2
+        generator_loss = criterion(fake_output, c)
 
         generator_loss.backward()
         gen_optimizer.step()
 
-    result_save_dir = f"./result/mse"
+    result_save_dir = f"./result/bce"
     '''
     Comment: 
     'dir' is a name of internal function of Python. 
@@ -193,21 +195,24 @@ for epoch in range(total_epoch):
     Oops. Fixed it!
     I'll have to give more detailed naming to avoid this problem!
     '''
-    m = nn.Upsample(scale_factor = 2)
+    transform = transforms.Resize((64,64))
     if not os.path.exists(result_save_dir):
         os.makedirs(result_save_dir)
     if epoch == 0:
         real_image = real_image.view(real_image.size(0), 3, 32, 32)
-        real_image = m(real_image)
+        real_image = transform(real_image)
         save_image(real_image, "./result/real.png", normalize=True)
     if (epoch+1) % 10 == 0:
         fake_image = fake_image.view(fake_image.size(0), 3, 32, 32)
-        fake_image = m(fake_image)
+        fake_image = transform(fake_image)
         save_image(fake_image, os.path.join(result_save_dir, f"{epoch}.png"), normalize=True)
     t = time()-start_time
     average_time += t
     print(f'Epoch {epoch}/{total_epoch} || discriminator loss={discriminator_loss:.4f}  || generator loss={generator_loss:.4f} || time {t:.3f}')
-
+    summary.add_scalar("bce/dis", discriminator_loss, epoch)
+    summary.add_scalar("bce/gen", generator_loss, epoch)
+    summary.flush()
+summary.close()
 torch.save(discriminator.state_dict(), os.path.join(result_save_dir,"discriminator.pth"))
 torch.save(generator.state_dict(), os.path.join(result_save_dir,"generator.pth"))
 '''
