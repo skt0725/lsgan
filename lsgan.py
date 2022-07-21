@@ -136,7 +136,7 @@ generator = Generator(latent_size).to(device)
 dis_optimizer = torch.optim.Adam(discriminator.parameters(), lr=learning_rate)
 gen_optimizer = torch.optim.Adam(generator.parameters(), lr=learning_rate)
 
-criterion = nn.BCEWithLogitsLoss().to(device)
+criterion = nn.MSELoss().to(device)
 average_time = 0
 summary = SummaryWriter('logs/')
 for epoch in range(total_epoch):
@@ -185,7 +185,7 @@ for epoch in range(total_epoch):
         generator_loss.backward()
         gen_optimizer.step()
 
-    result_save_dir = f"./result/bce"
+    result_save_dir = f"./result/mse"
     '''
     Comment: 
     'dir' is a name of internal function of Python. 
