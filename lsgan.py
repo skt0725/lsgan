@@ -1,5 +1,4 @@
 import os
-from re import M
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -49,7 +48,7 @@ Set number of epochs to 200!
 
 learning_rate = 0.0002
 train_data = datasets.CIFAR10(root = data_dir, train = True, transform = transform_input, download = True)
-dataloader = DataLoader(dataset = train_data, batch_size = batch_size, shuffle = True, num_workers = 4)
+dataloader = DataLoader(dataset = train_data, batch_size = batch_size, shuffle = True, num_workers = 4, drop_last = True)
 
 images, labels = next(iter(dataloader))
 img = images[0].squeeze()
@@ -70,6 +69,10 @@ repo: https://github.com/eriklindernoren/PyTorch-GAN/blob/master/implementations
 I tried to replace fc layer to deconvolutional layer at first.
 Mapped noise vector from 100 to 1024 dimension using fc (non-linearity not introduced)
 Further experiment : introduced non-linearity (maybe ReLU)
+'''
+'''
+problem : checkerboard artifact due to deconvolution layer
+breaking it down to interpolation->convolution can ease this problem
 '''
 class Generator(nn.Module):
     def __init__(self, latent_size):
@@ -136,14 +139,14 @@ generator = Generator(latent_size).to(device)
 dis_optimizer = torch.optim.Adam(discriminator.parameters(), lr=learning_rate)
 gen_optimizer = torch.optim.Adam(generator.parameters(), lr=learning_rate)
 
-criterion = nn.MSELoss().to(device)
+criterion = nn.BCEWithLogitsLoss().to(device)
 average_time = 0
 summary = SummaryWriter('logs/')
 for epoch in range(total_epoch):
     start_time = time()
     for i, (image, label) in enumerate(dataloader):
         real_image = image.to(device)
-        
+
         '''
         Comment:
         Nice details. The paper also defined parameters called a,b,c.
@@ -185,7 +188,7 @@ for epoch in range(total_epoch):
         generator_loss.backward()
         gen_optimizer.step()
 
-    result_save_dir = f"./result/mse"
+    result_save_dir = f"./result/bce"
     '''
     Comment: 
     'dir' is a name of internal function of Python. 
@@ -198,14 +201,17 @@ for epoch in range(total_epoch):
     transform = transforms.Resize((64,64))
     if not os.path.exists(result_save_dir):
         os.makedirs(result_save_dir)
-    if epoch == 0:
-        real_image = real_image.view(real_image.size(0), 3, 32, 32)
-        real_image = transform(real_image)
-        save_image(real_image, "./result/real.png", normalize=True)
+    # if epoch == 0:
+    #     real_image = real_image.view(real_image.size(0), 3, 32, 32)
+    #     real_image = transform(real_image)
+    #     save_image(real_image, "./result/real.png", normalize=True, nrow=8)
+    #     fake_image = fake_image.view(fake_image.size(0), 3, 32, 32)
+    #     fake_image = transform(fake_image)
+    #     save_image(fake_image, "./result/fake.png", normalize=True, nrow=8)
     if (epoch+1) % 10 == 0:
         fake_image = fake_image.view(fake_image.size(0), 3, 32, 32)
         fake_image = transform(fake_image)
-        save_image(fake_image, os.path.join(result_save_dir, f"{epoch}.png"), normalize=True)
+        save_image(fake_image, os.path.join(result_save_dir, f"{epoch}.png"), normalize=True, nrow=8)
     t = time()-start_time
     average_time += t
     print(f'Epoch {epoch}/{total_epoch} || discriminator loss={discriminator_loss:.4f}  || generator loss={generator_loss:.4f} || time {t:.3f}')
